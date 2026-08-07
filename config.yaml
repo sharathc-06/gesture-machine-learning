@@ -1,0 +1,68 @@
+camera:
+  width: 640
+  height: 480
+  fps: 30
+
+mediapipe:
+  max_num_hands: 1
+  model_complexity: 1
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+
+classifier:
+  type: "ml"               # "ml" or "rule"
+  model_path: "models/gesture_model.pkl"
+  label_map:
+    - thumbs_up
+    - peace
+    - ok
+    - rock
+    - open_palm
+    - fist
+    - point_left
+    - point_right
+    - finger_gun
+
+debounce:
+  stable_frames: 5
+  cooldown_seconds: 2.0
+
+smoothing:
+  alpha: 0.7
+
+assets:
+  audio_dir: "assets/audio"
+  video_dir: "assets/video"
+
+gesture_mappings:
+  thumbs_up:
+    audio: "thumbs_up.mp3"
+    video: null
+  peace:
+    audio: "peace.mp3"
+    video: null
+  ok:
+    audio: "ok.mp3"
+    video: null
+  rock:
+    audio: "rock.mp3"
+    video: null
+  open_palm:
+    audio: "open_palm.mp3"
+    video: null
+  fist:
+    audio: "fist.mp3"
+    video: null
+  point_left:
+    audio: "point_left.mp3"
+    video: null
+  point_right:
+    audio: "point_right.mp3"
+    video: null
+  finger_gun:
+    audio: "finger_gun.mp3"
+    video: null
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
