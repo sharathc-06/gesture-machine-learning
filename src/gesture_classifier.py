@@ -125,8 +125,18 @@ class MLGestureClassifier(BaseGestureClassifier):
     """Gesture classifier using a pre-trained scikit-learn / XGBoost model."""
 
     def __init__(self, model_path: str, label_map: List[str]) -> None:
-        self.model = joblib.load(model_path)
-        self.label_map = label_map
+        loaded = joblib.load(model_path)
+        if isinstance(loaded, dict) and "model" in loaded:
+            # New-style artifact from train_classifier.py: the label ordering the
+            # model was actually trained on travels with the model, so it's the
+            # source of truth. Fall back to the config-supplied label_map only if
+            # the artifact didn't include one (defensive, shouldn't normally happen).
+            self.model = loaded["model"]
+            self.label_map = loaded.get("classes") or label_map
+        else:
+            # Legacy artifact: a bare estimator saved directly with joblib.dump().
+            self.model = loaded
+            self.label_map = label_map
         logger.info(f"Loaded ML model from {model_path}")
 
     def predict(self, landmarks: List[float]) -> Tuple[str, float]:
@@ -135,11 +145,32 @@ class MLGestureClassifier(BaseGestureClassifier):
         X = np.array(landmarks).reshape(1, -1)
         if hasattr(self.model, "predict_proba"):
             proba = self.model.predict_proba(X)[0]
-            idx = np.argmax(proba)
-            confidence = proba[idx]
-            gesture = self.label_map[idx]
+            idx = int(np.argmax(proba))
+            confidence = float(proba[idx])
+            gesture = self._resolve_label(idx)
         else:
-            idx = self.model.predict(X)[0]
-            confidence = 1.0  # models without proba
-            gesture = self.label_map[idx]
+            raw = self.model.predict(X)[0]
+            confidence = 1.0  # models without predict_proba
+            gesture = self._resolve_label(raw)
         return gesture, confidence
+
+    def _resolve_label(self, prediction) -> str:
+        """Map a raw model prediction to a gesture name.
+
+        Handles both conventions transparently: some estimators (e.g. RandomForest/
+        SVM fit directly on strings) return the gesture name itself from predict(),
+        while others (e.g. models trained on LabelEncoder output, or the argmax of
+        predict_proba) return an integer index into self.label_map. Falls back to
+        "unknown" instead of raising if the model and label_map are out of sync.
+        """
+        if isinstance(prediction, (str, np.str_)):
+            return str(prediction)
+        try:
+            idx = int(prediction)
+        except (TypeError, ValueError):
+            logger.warning(f"Unrecognized prediction type from model: {prediction!r}")
+            return "unknown"
+        if 0 <= idx < len(self.label_map):
+            return self.label_map[idx]
+        logger.warning(f"Predicted index {idx} out of range for label_map of size {len(self.label_map)}")
+        return "unknown"
