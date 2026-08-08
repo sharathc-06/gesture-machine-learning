@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -32,7 +33,16 @@ def main():
     logger.info(f"Loaded {len(df)} samples")
 
     X = df.drop("label", axis=1).values
-    y = df["label"].values
+    y_raw = df["label"].values
+
+    # Encode string gesture labels to a fixed set of integer indices. RandomForest/SVM
+    # would happily fit on the raw strings and hand them straight back from predict(),
+    # but XGBoost requires numeric class labels. Encoding up front makes every model's
+    # predict()/predict_proba() output consistent (integer indices into label_encoder.classes_),
+    # so the inference side never has to guess which convention a given model uses.
+    label_encoder = LabelEncoder()
+    y = label_encoder.fit_transform(y_raw)
+    logger.info(f"Classes ({len(label_encoder.classes_)}): {list(label_encoder.classes_)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
@@ -53,7 +63,13 @@ def main():
         y_pred = model.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
         logger.info(f"{name} Accuracy: {acc:.4f}")
-        logger.info(f"Classification Report:\n{classification_report(y_test, y_pred)}")
+        logger.info(
+            "Classification Report:\n"
+            + classification_report(
+                y_test, y_pred, labels=range(len(label_encoder.classes_)),
+                target_names=label_encoder.classes_, zero_division=0,
+            )
+        )
         # cross validation
         scores = cross_val_score(model, X, y, cv=3)
         logger.info(f"{name} CV Accuracy: {scores.mean():.4f} (+/- {scores.std():.4f})")
@@ -64,7 +80,12 @@ def main():
 
     out_path = Path(args.model_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(best_model, out_path)
+    # Bundle the model together with the exact label ordering it was trained on, so
+    # gesture_classifier.py never has to rely on config.yaml's hand-maintained
+    # label_map (which can silently drift out of sync with the training data / the
+    # order sklearn assigns to model.classes_) to decode predictions.
+    artifact = {"model": best_model, "classes": list(label_encoder.classes_)}
+    joblib.dump(artifact, out_path)
     logger.info(f"Best model ({best_name}) saved to {out_path}")
 
 if __name__ == "__main__":
