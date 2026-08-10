@@ -51,6 +51,30 @@ class Config:
     def naruto_target_samples_per_class(self) -> int:
         return int(self.naruto.get("target_samples_per_class", 500))
 
+    @property
+    def naruto_image_dir(self) -> Path:
+        return Path(self.naruto.get("image_dataset", {}).get("dir", "data/naruto_images"))
+
+    @property
+    def naruto_image_target_samples_per_class(self) -> int:
+        return int(self.naruto.get("image_dataset", {}).get("target_samples_per_class", 500))
+
+    @property
+    def naruto_image_model_path(self) -> Path:
+        return Path(self.naruto.get("image_model", {}).get("model_path", "models/naruto_image_model.pth"))
+
+    @property
+    def naruto_image_confidence_threshold(self) -> float:
+        return float(self.naruto.get("image_model", {}).get("confidence_threshold", 0.75))
+
+    @property
+    def naruto_image_size(self) -> int:
+        return int(self.naruto.get("image_model", {}).get("image_size", 224))
+
+    @property
+    def naruto_inference_every_n_frames(self) -> int:
+        return int(self.naruto.get("image_model", {}).get("inference_every_n_frames", 1))
+
 
 def setup_logging(config: Config) -> None:
     """Configure root logger based on config."""
