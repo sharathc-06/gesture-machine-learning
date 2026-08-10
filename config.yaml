@@ -67,3 +67,11 @@ logging:
 naruto:
   dataset_path: "data/naruto_landmarks.csv"
   target_samples_per_class: 500
+  image_dataset:
+    dir: "data/naruto_images"
+    target_samples_per_class: 500
+  image_model:
+    model_path: "models/naruto_image_model.pth"
+    confidence_threshold: 0.75
+    image_size: 224
+    inference_every_n_frames: 1
