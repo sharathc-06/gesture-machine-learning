@@ -25,6 +25,7 @@ class Config:
         self.assets = self._data["assets"]
         self.gesture_mappings = self._data["gesture_mappings"]
         self.logging_config = self._data["logging"]
+        self.naruto = self._data.get("naruto", {})
 
     @property
     def audio_dir(self) -> Path:
@@ -41,6 +42,14 @@ class Config:
     @property
     def label_map(self) -> list:
         return self.classifier["label_map"]
+
+    @property
+    def naruto_dataset_path(self) -> Path:
+        return Path(self.naruto.get("dataset_path", "data/naruto_landmarks.csv"))
+
+    @property
+    def naruto_target_samples_per_class(self) -> int:
+        return int(self.naruto.get("target_samples_per_class", 500))
 
 
 def setup_logging(config: Config) -> None:

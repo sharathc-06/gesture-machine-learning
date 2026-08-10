@@ -10,7 +10,7 @@ mediapipe:
   min_tracking_confidence: 0.5
 
 classifier:
-  type: "ml"               # "ml" or "rule"
+  type: "ml"                 # "ml" or "rule"
   model_path: "models/gesture_model.pkl"
   label_map:
     - thumbs_up
@@ -18,7 +18,6 @@ classifier:
     - ok
     - rock
     - open_palm
-    - fist
     - point_left
     - point_right
     - finger_gun
@@ -26,6 +25,7 @@ classifier:
 debounce:
   stable_frames: 5
   cooldown_seconds: 2.0
+  confidence_threshold: 0.6
 
 smoothing:
   alpha: 0.7
@@ -50,9 +50,6 @@ gesture_mappings:
   open_palm:
     audio: "open_palm.mp3"
     video: null
-  fist:
-    audio: "fist.mp3"
-    video: null
   point_left:
     audio: "point_left.mp3"
     video: null
@@ -66,3 +63,7 @@ gesture_mappings:
 logging:
   level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+naruto:
+  dataset_path: "data/naruto_landmarks.csv"
+  target_samples_per_class: 500

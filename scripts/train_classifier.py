@@ -10,7 +10,7 @@ import joblib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
@@ -57,22 +57,37 @@ def main():
     best_model = None
     best_score = 0
     best_name = ""
+    results = {}
 
     for name, model in models.items():
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
-        logger.info(f"{name} Accuracy: {acc:.4f}")
+        report_dict = classification_report(
+            y_test, y_pred, labels=range(len(label_encoder.classes_)),
+            target_names=label_encoder.classes_, zero_division=0, output_dict=True,
+        )
+        macro_f1 = report_dict["macro avg"]["f1-score"]
+        weighted_f1 = report_dict["weighted avg"]["f1-score"]
+        cm = confusion_matrix(y_test, y_pred, labels=range(len(label_encoder.classes_)))
+
+        logger.info(f"{name} Test Accuracy: {acc:.4f}")
+        logger.info(f"{name} Macro F1: {macro_f1:.4f} | Weighted F1: {weighted_f1:.4f}")
         logger.info(
-            "Classification Report:\n"
+            "Classification Report (precision / recall / f1 per class):\n"
             + classification_report(
                 y_test, y_pred, labels=range(len(label_encoder.classes_)),
                 target_names=label_encoder.classes_, zero_division=0,
             )
         )
+        logger.info(
+            f"Confusion Matrix (rows=true, cols=predicted, order={list(label_encoder.classes_)}):\n{cm}"
+        )
         # cross validation
         scores = cross_val_score(model, X, y, cv=3)
         logger.info(f"{name} CV Accuracy: {scores.mean():.4f} (+/- {scores.std():.4f})")
+
+        results[name] = {"test_acc": acc, "macro_f1": macro_f1, "weighted_f1": weighted_f1, "cv_acc": scores.mean()}
         if scores.mean() > best_score:
             best_score = scores.mean()
             best_model = model
@@ -86,6 +101,14 @@ def main():
     # order sklearn assigns to model.classes_) to decode predictions.
     artifact = {"model": best_model, "classes": list(label_encoder.classes_)}
     joblib.dump(artifact, out_path)
+
+    logger.info("=== FINAL SUMMARY ===")
+    for name, r in results.items():
+        marker = " <== SELECTED" if name == best_name else ""
+        logger.info(
+            f"{name}: test_acc={r['test_acc']:.4f} macro_f1={r['macro_f1']:.4f} "
+            f"weighted_f1={r['weighted_f1']:.4f} cv_acc={r['cv_acc']:.4f}{marker}"
+        )
     logger.info(f"Best model ({best_name}) saved to {out_path}")
 
 if __name__ == "__main__":

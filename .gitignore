@@ -1,0 +1,9 @@
+﻿.venv/
+__pycache__/
+*.pyc
+
+# Local datasets
+data/
+
+# Trained models
+models/
