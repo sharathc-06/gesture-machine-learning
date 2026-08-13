@@ -18,10 +18,11 @@ class HandDetector:
         model_complexity: int = 1,
         min_detection_confidence: float = 0.5,
         min_tracking_confidence: float = 0.5,
+        static_image_mode: bool = False,
     ) -> None:
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
+            static_image_mode=static_image_mode,
             max_num_hands=max_num_hands,
             model_complexity=model_complexity,
             min_detection_confidence=min_detection_confidence,

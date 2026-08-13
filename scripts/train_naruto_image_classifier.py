@@ -1,15 +1,33 @@
 """Transfer-learning training script for the Naruto image classifier.
 
-Loads images from data/naruto_images/<class>/, trains a MobileNetV3-Small
-(ImageNet-pretrained) with a replaced classification head, and saves
-models/naruto_image_model.pth.
+Loads images from data/naruto_hand_crops/<class>/ (the CROPPED-hand dataset
+produced by scripts/collect_naruto_images.py, one class subdir per sign),
+trains a MobileNetV3-Small (ImageNet-pretrained) with a replaced
+classification head, and saves models/naruto_hand_model.pth by default.
+
+Deliberately a NEW default checkpoint filename, not
+models/naruto_image_model.pth - that older checkpoint was trained on
+full-frame images under the previous architecture and is left untouched;
+this script's output is a different model trained on a different input
+representation and should never silently overwrite it. Use --model-out to
+point elsewhere if needed.
+
+NO CROPPING HAPPENS IN THIS SCRIPT. The saved dataset images are already
+hand crops (cropping happens once, at collection time, in
+scripts/collect_naruto_images.py via src/detector.py + the crop helpers in
+src/image_preprocessing.py). Training only ever loads a saved crop and runs
+it through the existing letterbox_to_square() + ImageNet-normalize
+preprocessing - see build_dataset_tensors() below - exactly the same
+preprocessing shape as before this dataset switch, just applied to a
+smaller, hand-focused source image instead of a full frame.
 
 SESSION-AWARE SPLITTING (avoiding the leakage problem from the earlier
 landmark-model evaluation)
 --------------------------------------------------------------------------
-scripts/collect_naruto_images.py names every file
-`<class>_<session_id>_<seq>.jpg`. This script parses the session id out of
-each filename and splits by (class, session) GROUP rather than by individual
+scripts/collect_naruto_images.py names every SAVED crop
+`<class>_<session_id>_<seq>.jpg` - unchanged filename format from the old
+full-frame collector. This script parses the session id out of each
+filename and splits by (class, session) GROUP rather than by individual
 image, using sklearn's GroupShuffleSplit. That means all images from one
 sitting go entirely into train, or entirely into val/test - never split
 across the boundary - so validation/test accuracy actually estimates
@@ -116,7 +134,13 @@ def build_dataset_tensors(samples, input_size, augment: bool):
     single (X, y) tensor pair. Kept simple (whole split in memory at once)
     rather than a streaming DataLoader/Dataset class, since a few thousand
     224x224 images fits comfortably in memory and this keeps the script easy
-    to follow; revisit only if the dataset grows far beyond that."""
+    to follow; revisit only if the dataset grows far beyond that.
+
+    NOTE: `path` here points at an already-cropped hand image (see module
+    docstring) - this function does NOT crop anything itself, it only
+    letterboxes (preserving aspect ratio, no cropping) and normalizes,
+    identical to how src/image_preprocessing.preprocess_image_file does it
+    for consistency with inference."""
     import torch
     import torchvision.transforms as T
     from PIL import Image
@@ -200,8 +224,14 @@ def run_epoch(model, X, y, batch_size, optimizer=None, device="cpu"):
 
 def main():
     parser = argparse.ArgumentParser(description="Train the Naruto image classifier via transfer learning")
-    parser.add_argument("--data-dir", type=str, default="data/naruto_images")
-    parser.add_argument("--model-out", type=str, default="models/naruto_image_model.pth")
+    parser.add_argument("--data-dir", type=str, default="data/naruto_hand_crops",
+                         help="Directory of cropped-hand training images, one class subdir per sign "
+                              "(default: data/naruto_hand_crops - see scripts/collect_naruto_images.py). "
+                              "The old full-frame dataset (data/naruto_images) is not used by default.")
+    parser.add_argument("--model-out", type=str, default="models/naruto_hand_model.pth",
+                         help="Checkpoint output path (default: models/naruto_hand_model.pth - deliberately "
+                              "distinct from models/naruto_image_model.pth, the old full-frame model, so this "
+                              "script never silently overwrites it).")
     parser.add_argument("--input-size", type=int, default=224)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--epochs-head", type=int, default=10,
