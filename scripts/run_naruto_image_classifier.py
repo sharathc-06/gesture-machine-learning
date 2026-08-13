@@ -1,11 +1,12 @@
 """Real-time demo for the Naruto image classifier PLUS the jutsu sequence
 engine: camera feed with predicted sign + confidence, and live progress
-through all three jutsu sequences overlaid.
+through the currently-SELECTED jutsu only (press 1/2/3 to select
+Rasengan/Chidori/Fireball - see JutsuSequenceEngine.select()).
 
 Reuses the exact same camera/classifier loop from before (no second
-pipeline) - the only additions are: construct one JutsuSequenceEngine,
-feed it each frame's classifier prediction (+ the mouth-O stub/manual
-override), and draw its progress.
+pipeline) - the only additions are: construct one JutsuSequenceEngine, let
+1/2/3 select which jutsu is active, feed it each frame's classifier
+prediction (+ the mouth-O stub/manual override), and draw its progress.
 
 Loads the model exactly once via NarutoImageClassifier's constructor, then
 reuses it every frame - unchanged from before.
@@ -28,6 +29,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("run_naruto_image_classifier")
 
 JUTSU_DISPLAY_NAMES = {"rasengan": "RASENGAN", "chidori": "CHIDORI", "fireball": "FIREBALL"}
+JUTSU_SELECT_KEYS = {ord('1'): "rasengan", ord('2'): "chidori", ord('3'): "fireball"}
 BANNER_DISPLAY_SECONDS = 2.0
 
 
@@ -44,33 +46,43 @@ def draw_overlay(frame, label, confidence, fps):
 
 
 def draw_jutsu_progress(frame, engine: JutsuSequenceEngine, x_start: int):
-    """Draws each jutsu's checklist side by side, starting at x_start."""
-    col_width = 190
-    for col, jutsu_name in enumerate(JUTSU_SEQUENCES.keys()):
-        x = x_start + col * col_width
-        y = 30
-        progress = engine.get_progress(jutsu_name)
+    """Draws ONLY the currently-selected jutsu's checklist (if any). Other
+    trackers exist internally (engine.trackers) but are intentionally not
+    shown here, mirroring that they're not receiving predictions either -
+    showing them as if equally "live" would be misleading now that only one
+    is actually active."""
+    x, y = x_start, 30
 
-        title_color = (0, 200, 200) if not progress.on_cooldown else (100, 100, 100)
-        cv2.putText(frame, JUTSU_DISPLAY_NAMES[jutsu_name], (x, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, title_color, 2, cv2.LINE_AA)
+    if engine.active_jutsu is None:
+        cv2.putText(frame, "No jutsu selected", (x, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 150, 150), 2, cv2.LINE_AA)
         y += 24
+        cv2.putText(frame, "Press 1/2/3 to select", (x, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (150, 150, 150), 1, cv2.LINE_AA)
+        return
 
-        for step, accepted in zip(progress.steps, progress.accepted):
-            mark = "[x]" if accepted else "[ ]"
-            is_current = (step == progress.current_step)
-            color = (0, 255, 255) if is_current else ((0, 255, 0) if accepted else (180, 180, 180))
-            cv2.putText(frame, f"{mark} {step.upper()}", (x, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
-            y += 18
+    jutsu_name = engine.active_jutsu
+    progress = engine.get_progress(jutsu_name)
 
-        y += 4
-        if progress.on_cooldown:
-            cv2.putText(frame, f"(cooldown {progress.cooldown_remaining:.1f}s)", (x, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1, cv2.LINE_AA)
-        elif progress.current_step:
-            cv2.putText(frame, f"Current: {progress.current_step.upper()}", (x, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Selected Jutsu: {JUTSU_DISPLAY_NAMES[jutsu_name]}", (x, y),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 200), 2, cv2.LINE_AA)
+    y += 30
+
+    for step, accepted in zip(progress.steps, progress.accepted):
+        mark = "[x]" if accepted else "[ ]"
+        is_current = (step == progress.current_step)
+        color = (0, 255, 255) if is_current else ((0, 255, 0) if accepted else (180, 180, 180))
+        cv2.putText(frame, f"{mark} {step.upper()}", (x, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+        y += 20
+
+    y += 6
+    if progress.on_cooldown:
+        cv2.putText(frame, f"(cooldown {progress.cooldown_remaining:.1f}s)", (x, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1, cv2.LINE_AA)
+    elif progress.current_step:
+        cv2.putText(frame, f"Current: {progress.current_step.upper()}", (x, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
 
 def draw_completion_banner(frame, jutsu_name: str):
@@ -103,7 +115,8 @@ def main():
     camera.start()
 
     print("NARUTO IMAGE CLASSIFIER + JUTSU SEQUENCE ENGINE - live demo")
-    print("Press 'q' to quit. Hold 'm' to simulate the mouth-O gesture (placeholder).")
+    print("Press 1=Rasengan 2=Chidori 3=Fireball to select a jutsu. 'q' to quit.")
+    print("Hold 'm' to simulate the mouth-O gesture (placeholder).")
 
     frame_count = 0
     last_label, last_confidence = "unknown", 0.0
@@ -144,6 +157,9 @@ def main():
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
+            if key in JUTSU_SELECT_KEYS:
+                sequence_engine.select(JUTSU_SELECT_KEYS[key])
+                logger.info(f"Selected jutsu: {JUTSU_SELECT_KEYS[key]}")
             if key == ord('m'):
                 mouth_o_signal = True  # manual placeholder trigger, see note above
 

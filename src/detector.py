@@ -121,6 +121,53 @@ class HandDetector:
             "combined": combined,
         }
 
+    def get_hand_bboxes(self, frame: np.ndarray):
+        """
+        Run MediaPipe hand detection ONCE on `frame` and return both the raw
+        results object and one absolute-pixel-coordinate bounding box per
+        detected hand.
+
+        This is intentionally a NEW method, separate from process() and
+        process_two_hands(): those two both convert landmarks into
+        wrist-relative vectors (subtracting landmark 0 from every point),
+        which throws away the exact absolute-position information a
+        bounding box needs. Re-deriving a bbox from their output would mean
+        re-adding the wrist offset back in, which is redundant and error
+        prone - simplest and safest is to read x/y straight off the raw
+        MediaPipe landmarks here, before any wrist-relative normalization
+        is applied.
+
+        Returns:
+            (results, bboxes) where:
+              - results is the raw mp.solutions.hands results object (same
+                shape as what process()/process_two_hands() internally use),
+                so a caller can also pass it straight to draw() without a
+                second, redundant self.hands.process() call.
+              - bboxes is a list of (x_min, y_min, x_max, y_max) tuples in
+                absolute pixel coordinates (NOT normalized, NOT clipped to
+                frame bounds - clipping/padding is the caller's concern),
+                one entry per detected hand, in the same order as
+                results.multi_hand_landmarks. Empty list if no hand found.
+
+        Coordinates are computed from frame.shape, so `frame` must be the
+        same frame (same orientation/size) that predictions/crops will
+        later be drawn/cropped from - e.g. the already-flipped frame, to
+        match every other caller in this codebase (see module docstring
+        notes on process_two_hands regarding the flip convention).
+        """
+        h, w, _ = frame.shape
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.hands.process(rgb)
+
+        bboxes = []
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                xs = [lm.x * w for lm in hand_landmarks.landmark]
+                ys = [lm.y * h for lm in hand_landmarks.landmark]
+                bboxes.append((min(xs), min(ys), max(xs), max(ys)))
+
+        return results, bboxes
+
     def draw(self, frame: np.ndarray, results) -> np.ndarray:
         """Draw hand landmarks and connections on the frame."""
         if results.multi_hand_landmarks:
